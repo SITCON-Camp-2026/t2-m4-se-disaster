@@ -54,8 +54,8 @@ Do not change these without asking the course designer.
 ## Public Starter Must Not Contain
 
 - Hidden event data.
-- Mentor guides.
-- Expected answers.
+- Mentor guide.
+- Expected answer.
 - The complete original report PDF.
 - Concrete interview materials.
 - Concrete process-design materials.
@@ -95,7 +95,7 @@ The public starter may include:
 - Do not display unconfirmed information as confirmed / verified fact.
 - Do not place later release data in this public starter.
 
-If a technical document needs the English terms, pair them with student-readable wording: 原始資訊 / 未整理資料, 整理後資料, 資料格式（schema）, 轉換器（adapter）, 完成條件, 畫面從哪個檔案進入.
+If a technical document needs English terms, pair them with student-readable wording: 原始資訊 / 未整理資料, 整理後資料, 資料格式, 完成條件, 畫面從哪個檔案進入.
 
 ## GitHub Pages Deliverable Rule
 
@@ -124,4 +124,4 @@ The starter repo is acceptable when:
 - It has `docs/phase0-observations.md` and `docs/ai-log.md`.
 - It has AGENTS, SAFETY, DATA_SOURCES, README, TEAM.
 - It has CI and GitHub Pages workflow support.
-- It contains no hidden event data, mentor guide, expected answers, real personal data, secrets, real disaster data, or real LLM runtime calls.
+- It contains no hidden event data, mentor guide, expected answer, real personal data, secrets, real disaster data, or real LLM runtime calls.

@@ -31,8 +31,6 @@ src/app/App.tsx
 | Phase 0 觀察     | `docs/phase0-observations.md`                | 否              | 記錄資料品質問題                  |
 | AI log           | `docs/ai-log.md`                             | 否              | 記錄 AI 協作與人類判斷            |
 
-`src/adapters/`、`src/contracts/` 與 `src/fixtures/shared/` 是起始專案的技術支援資料夾。Phase 0 學員不需要先使用它們。
-
 ## 常見不算完成的情況
 
 以下都不算完成前端成果：

@@ -57,8 +57,8 @@ src/app/App.tsx
 - 不做真實救災判斷。
 - Phase 0 使用 `src/fixtures/phase-0/` 的原始資訊 / 未整理資料。
 - 不把未整理資料搬進 shared fixtures 假裝成整理後資料。
-- 若學生文件需要保留英文技術詞，請搭配中文說法，例如資料格式（schema）、轉換器（adapter）、完成條件（acceptance criteria）。
-- public 起始專案不放後續課程材料、hidden event data、mentor guide 或 expected answers。
+- 若學生文件需要保留英文技術詞，請搭配中文說法，例如資料格式（schema）或完成條件（completion criteria）。
+- public 起始專案不放後續課程材料、隱藏變更資料、講師指南或標準答案。
 
 ## 授權
 
