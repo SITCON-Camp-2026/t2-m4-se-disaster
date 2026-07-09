@@ -35,3 +35,12 @@ export type Phase0JudgementDraft = {
   unsafeToActDirectly: boolean;
   humanReviewNote?: string;
 };
+
+export type Phase0WorkbenchDraft = Phase0JudgementDraft & {
+  draftStatus: "not_started" | "drafting" | "human_corrected";
+  candidateSummary: string;
+  operatorIsAffectedPerson: "unknown" | "yes" | "no";
+  cannotBecomeTaskReason: string;
+  agentConcern: string;
+  aiReviewNote?: string;
+};

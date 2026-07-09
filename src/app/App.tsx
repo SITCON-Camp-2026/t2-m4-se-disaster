@@ -1,14 +1,19 @@
 import { useState } from "react";
 import messyReports from "../fixtures/phase-0/messy-reports.json";
 import { EmptyState } from "../components/EmptyState";
+import { createInitialDrafts } from "../features/phase-0/phase0-drafts";
+import { Phase0OrganizedInfoPanel } from "../features/phase-0/Phase0OrganizedInfoPanel";
+import { Phase0PeopleCallPanel } from "../features/phase-0/Phase0PeopleCallPanel";
 import { Phase0RawInfoPanel } from "../features/phase-0/Phase0RawInfoPanel";
 import { Phase0Workbench } from "../features/phase-0/Phase0Workbench";
 import type { Phase0MessyRecord } from "../features/phase-0/phase0-types";
 
-type TabKey = "raw" | "workbench";
+type TabKey = "raw" | "organized" | "people" | "workbench";
 
 const tabs: Array<{ key: TabKey; label: string }> = [
   { key: "raw", label: "原始資訊" },
+  { key: "organized", label: "候選整理" },
+  { key: "people", label: "人力呼叫" },
   { key: "workbench", label: "整理工作台" },
 ];
 
@@ -19,6 +24,9 @@ export function App() {
   const [selectedRecordId, setSelectedRecordId] = useState(
     phase0Records[0]?.id ?? "",
   );
+  const [drafts, setDrafts] = useState(() =>
+    createInitialDrafts(phase0Records),
+  );
 
   function selectForWorkbench(recordId: string) {
     setSelectedRecordId(recordId);
@@ -28,7 +36,10 @@ export function App() {
   return (
     <main className="layout">
       <header className="hero">
-        <p className="eyebrow">SITCON Camp 2026</p>
+        <div className="hero__meta">
+          <p className="eyebrow">SITCON Camp 2026</p>
+          <span>Phase 0</span>
+        </div>
         <h1>災害資訊整理工作台</h1>
         <p>
           第一階段先用 coding agent
@@ -58,11 +69,18 @@ export function App() {
             selectedRecordId={selectedRecordId}
             onSelect={selectForWorkbench}
           />
+        ) : activeTab === "organized" ? (
+          <Phase0OrganizedInfoPanel records={phase0Records} drafts={drafts} />
+        ) : activeTab === "people" ? (
+          <Phase0PeopleCallPanel records={phase0Records} drafts={drafts} />
         ) : (
           <Phase0Workbench
             records={phase0Records}
             selectedRecordId={selectedRecordId}
             onSelect={setSelectedRecordId}
+            drafts={drafts}
+            setDrafts={setDrafts}
+            onOpenOrganized={() => setActiveTab("organized")}
           />
         )}
       </section>

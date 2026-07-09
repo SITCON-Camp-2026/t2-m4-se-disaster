@@ -23,9 +23,16 @@
 
 ## 紀錄格式
 
-| 時間 | 階段 | 任務 | AI / Agent 建議 | 採用 / 拒絕 | 人類判斷理由 | 相關檔案 / commit |
-| ---- | ---- | ---- | --------------- | ----------- | ------------ | ----------------- |
-|      |      |      |                 |             |              |                   |
+| 時間       | 階段    | 任務                | AI / Agent 建議                                                                                                  | 採用 / 拒絕 | 人類判斷理由                                                                                | 相關檔案 / commit                                                         |
+| ---------- | ------- | ------------------- | ---------------------------------------------------------------------------------------------------------------- | ----------- | ------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------- |
+| 2026-07-09 | Phase 0 | 實作整理草稿        | 在前端工作台加入建立、編輯、刪除、重設整理草稿；用保守預設標示需要人工確認、不能直接變成任務、agent 判斷需質疑處 | 採用        | 草稿只存在前端記憶體，不新增後端或外部 API；未把 `needs_review` / `unverified` 顯示成已確認 | `src/features/phase-0/Phase0Workbench.tsx`, `docs/phase0-observations.md` |
+| 2026-07-09 | Phase 0 | 加入 AI 檢查按鈕    | 使用 Cloudflare AI Gateway key 呼叫外部模型                                                                      | 拒絕        | public starter 規則禁止 API key、外部 runtime API 與真實 LLM 呼叫；改做本機 AI 風格檢查     | `src/features/phase-0/Phase0Workbench.tsx`, `tests/app-smoke.test.tsx`    |
+| 2026-07-09 | Phase 0 | 改用後端代理呼叫 AI | 讓前端呼叫 `/api/ai-review`，由本機 Node proxy 讀 `.env` 的 key 後轉送 Cloudflare AI Gateway                     | 採用        | 不把 key 放進前端 bundle；AI 回覆只當風險提醒，仍不能把草稿標成已確認                       | `server/ai-review-server.ts`, `vite.config.ts`, `.env.example`            |
+| 2026-07-09 | Phase 0 | 調整畫面風格        | 讓首頁與工作台更可愛、柔和，保留待確認與不能直接變成任務的警示                                                   | 採用        | 只調整視覺呈現，不改原始資料、不把草稿或 AI 檢查顯示成已確認                                | `src/app/App.tsx`, `src/styles/global.css`                                |
+| 2026-07-09 | Phase 0 | 套用 AI Gateway API | 讓 proxy 依照 Gateway URL 自動選擇 `authorization` 或 `cf-aig-authorization` header                              | 採用        | token 仍只在 `.env` 與後端 proxy；目前 `.env` 還需要補 `CLOUDFLARE_AI_GATEWAY_URL`          | `server/ai-review-server.ts`, `.env.example`                              |
+| 2026-07-09 | Phase 0 | 新增候選整理頁      | 新增候選分類、完整度、可用度、重要細節與缺漏提醒                                                                 | 採用        | 頁面只顯示候選整理與評分，不把任何 `needs_review` / `unverified` 資訊當成已確認             | `src/features/phase-0/Phase0OrganizedInfoPanel.tsx`, `src/app/App.tsx`    |
+| 2026-07-09 | Phase 0 | 新增人力呼叫頁      | 依原始資訊列出候選人力類型，目標不清楚時標示暫不呼叫                                                             | 採用        | 只做候選角色整理，不實際派人；所有待確認或未查核資料都不能直接呼叫人員                      | `src/features/phase-0/Phase0PeopleCallPanel.tsx`, `src/app/App.tsx`       |
+| 2026-07-09 | Phase 0 | 改善草稿同步        | 在整理工作台補回可展開的手動文字編輯，並加入送到候選整理的切頁按鈕                                               | 採用        | 手動輸入仍只是候選草稿，送出只同步到整理頁，不把資訊標為已確認                              | `src/features/phase-0/Phase0Workbench.tsx`, `src/app/App.tsx`             |
 
 ## 範例
 
