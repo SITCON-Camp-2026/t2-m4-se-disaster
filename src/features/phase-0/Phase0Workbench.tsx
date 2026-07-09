@@ -127,6 +127,30 @@ function setListItem(currentValue: string, item: string, checked: boolean) {
   return nextItems.join("\n");
 }
 
+function mergeListText(currentValue: string, nextValue: string) {
+  const items = `${currentValue}\n${nextValue}`
+    .split("\n")
+    .map((value) => value.trim())
+    .filter(Boolean);
+
+  return Array.from(new Set(items)).join("\n");
+}
+
+function createDraftLinesFromAiReview(aiReviewNote: string) {
+  return aiReviewNote
+    .split("\n")
+    .map((line) =>
+      line
+        .replace(/^Cloudflare AI Gateway：/, "")
+        .replace(/^AI proxy 設定提醒：/, "")
+        .replace(/^本機 AI 風格檢查：/, "")
+        .replace(/^\d+[.)、]\s*/, "")
+        .trim(),
+    )
+    .filter(Boolean)
+    .join("\n");
+}
+
 function createLocalAiReview(
   record: Phase0MessyRecord,
   draft: Phase0WorkbenchDraft,
@@ -252,18 +276,32 @@ export function Phase0Workbench({
     setDrafts(createInitialDrafts(records));
   }
 
+  function applyAiReviewToDraft(
+    recordId: string,
+    draft: Phase0WorkbenchDraft,
+    aiReviewNote: string,
+  ) {
+    const draftLines = createDraftLinesFromAiReview(aiReviewNote);
+
+    updateDraft(recordId, {
+      aiReviewNote,
+      agentConcern: mergeListText(draft.agentConcern, aiReviewNote),
+      cannotBecomeTaskReason: draftLines
+        ? mergeListText(draft.cannotBecomeTaskReason, draftLines)
+        : draft.cannotBecomeTaskReason,
+      draftStatus: "human_corrected",
+      suggestedNextStep: "send_to_human_review",
+      unsafeToActDirectly: true,
+    });
+  }
+
   function runLocalAiReview(
     record: Phase0MessyRecord,
     draft: Phase0WorkbenchDraft,
   ) {
     const aiReviewNote = createLocalAiReview(record, draft);
 
-    updateDraft(record.id, {
-      aiReviewNote,
-      agentConcern: `${draft.agentConcern.trim()}\n${aiReviewNote}`.trim(),
-      draftStatus: "human_corrected",
-      unsafeToActDirectly: true,
-    });
+    applyAiReviewToDraft(record.id, draft, aiReviewNote);
   }
 
   async function runAiReview(
@@ -298,24 +336,14 @@ export function Phase0Workbench({
           : "AI proxy 設定提醒";
       const aiReviewNote = `${sourceLabel}：\n${result.note}`;
 
-      updateDraft(record.id, {
-        aiReviewNote,
-        agentConcern: `${draft.agentConcern.trim()}\n${aiReviewNote}`.trim(),
-        draftStatus: "human_corrected",
-        unsafeToActDirectly: true,
-      });
+      applyAiReviewToDraft(record.id, draft, aiReviewNote);
     } catch {
       const aiReviewNote = [
-        "AI proxy 無法連線，已改用本機 AI 風格檢查。",
+        "AI proxy 無法連線，已改用本機 AI 風格檢查。請確認另一個終端機正在執行 pnpm dev:api，Vite 才能把 /api/ai-review 轉送到本機 proxy。",
         createLocalAiReview(record, draft),
       ].join("\n");
 
-      updateDraft(record.id, {
-        aiReviewNote,
-        agentConcern: `${draft.agentConcern.trim()}\n${aiReviewNote}`.trim(),
-        draftStatus: "human_corrected",
-        unsafeToActDirectly: true,
-      });
+      applyAiReviewToDraft(record.id, draft, aiReviewNote);
     } finally {
       setReviewingRecordId(null);
     }
@@ -421,6 +449,17 @@ export function Phase0Workbench({
                     </button>
                   ))}
                 </div>
+                <label className="draft-direct-edit">
+                  候選摘要
+                  <textarea
+                    value={selectedDraft.candidateSummary}
+                    onChange={(event) =>
+                      updateDraft(selectedRecord.id, {
+                        candidateSummary: event.target.value,
+                      })
+                    }
+                  />
+                </label>
               </section>
 
               <div className="draft-editor__grid">
@@ -534,6 +573,17 @@ export function Phase0Workbench({
                     </label>
                   ))}
                 </div>
+                <label className="draft-direct-edit">
+                  目前草稿原因
+                  <textarea
+                    value={selectedDraft.cannotBecomeTaskReason}
+                    onChange={(event) =>
+                      updateDraft(selectedRecord.id, {
+                        cannotBecomeTaskReason: event.target.value,
+                      })
+                    }
+                  />
+                </label>
               </section>
 
               <section className="draft-choice-group">
@@ -563,51 +613,21 @@ export function Phase0Workbench({
                     </label>
                   ))}
                 </div>
+                <label className="draft-direct-edit">
+                  目前質疑與修正
+                  <textarea
+                    value={selectedDraft.agentConcern}
+                    onChange={(event) =>
+                      updateDraft(selectedRecord.id, {
+                        agentConcern: event.target.value,
+                        draftStatus: event.target.value.trim()
+                          ? "human_corrected"
+                          : "drafting",
+                      })
+                    }
+                  />
+                </label>
               </section>
-
-              <details className="manual-edit-panel">
-                <summary>手動編輯草稿文字</summary>
-                <div className="manual-edit-panel__body">
-                  <label>
-                    手動摘要
-                    <textarea
-                      value={selectedDraft.candidateSummary}
-                      onChange={(event) =>
-                        updateDraft(selectedRecord.id, {
-                          candidateSummary: event.target.value,
-                        })
-                      }
-                    />
-                  </label>
-
-                  <label>
-                    手動補充不能直接變成任務的原因
-                    <textarea
-                      value={selectedDraft.cannotBecomeTaskReason}
-                      onChange={(event) =>
-                        updateDraft(selectedRecord.id, {
-                          cannotBecomeTaskReason: event.target.value,
-                        })
-                      }
-                    />
-                  </label>
-
-                  <label>
-                    手動補充 Agent 需要被質疑處
-                    <textarea
-                      value={selectedDraft.agentConcern}
-                      onChange={(event) =>
-                        updateDraft(selectedRecord.id, {
-                          agentConcern: event.target.value,
-                          draftStatus: event.target.value.trim()
-                            ? "human_corrected"
-                            : "drafting",
-                        })
-                      }
-                    />
-                  </label>
-                </div>
-              </details>
 
               {selectedDraft.aiReviewNote ? (
                 <section
@@ -615,6 +635,18 @@ export function Phase0Workbench({
                   aria-label="AI 風格檢查結果"
                 >
                   <h4>AI 風格檢查結果</h4>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      applyAiReviewToDraft(
+                        selectedRecord.id,
+                        selectedDraft,
+                        selectedDraft.aiReviewNote ?? "",
+                      )
+                    }
+                  >
+                    套用到草稿
+                  </button>
                   <pre>{selectedDraft.aiReviewNote}</pre>
                 </section>
               ) : null}

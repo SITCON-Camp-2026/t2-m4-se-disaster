@@ -444,23 +444,14 @@ select {
   height: 18px;
 }
 
-.manual-edit-panel {
-  border: 1px dashed #e4cfc0;
-  border-radius: 8px;
-  padding: 10px 12px;
-  background: #fff7ed;
-}
-
-.manual-edit-panel summary {
-  cursor: pointer;
-  color: #5b4b41;
-  font-weight: 900;
-}
-
-.manual-edit-panel__body {
+.draft-direct-edit {
   display: grid;
   gap: 12px;
   margin-top: 12px;
+}
+
+.draft-direct-edit textarea {
+  min-height: 92px;
 }
 
 .draft-empty {
@@ -478,6 +469,10 @@ select {
 
 .ai-review-note h4 {
   margin: 0 0 8px;
+}
+
+.ai-review-note button {
+  margin-bottom: 10px;
 }
 
 .ai-review-note pre {

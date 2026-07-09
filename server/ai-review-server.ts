@@ -5,6 +5,7 @@ import {
 } from "node:http";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
+import { pathToFileURL } from "node:url";
 
 type ReviewRequest = {
   record: {
@@ -30,12 +31,9 @@ type ReviewResponse = {
   source: "cloudflare_ai_gateway" | "configuration_error" | "upstream_error";
 };
 
-const port = Number(process.env.AI_REVIEW_PORT ?? 8787);
 const cloudflareGatewayHost = "gateway.ai.cloudflare.com";
 
-function loadLocalEnv() {
-  const envPath = resolve(process.cwd(), ".env");
-
+export function loadLocalEnv(envPath = resolve(process.cwd(), ".env")) {
   try {
     const envFile = readFileSync(envPath, "utf8");
 
@@ -65,6 +63,9 @@ function sendJson(
 ) {
   response.writeHead(statusCode, {
     "content-type": "application/json; charset=utf-8",
+    "access-control-allow-origin": "*",
+    "access-control-allow-methods": "POST, OPTIONS",
+    "access-control-allow-headers": "content-type",
   });
   response.end(JSON.stringify(payload));
 }
@@ -136,23 +137,24 @@ function extractText(payload: unknown) {
   return "";
 }
 
-function createGatewayRequestConfig() {
+export function createGatewayRequestConfig() {
   const gatewayToken =
     process.env.CLOUDFLARE_AI_GATEWAY_TOKEN ?? process.env.key;
   const providerApiKey =
     process.env.PROVIDER_API_KEY ?? process.env.OPENAI_API_KEY;
-  const gatewayUrl = process.env.CLOUDFLARE_AI_GATEWAY_URL;
+  const gatewayId = process.env.CLOUDFLARE_AI_GATEWAY_ID;
+  const configuredGatewayUrl = process.env.CLOUDFLARE_AI_GATEWAY_URL;
 
-  if (!gatewayToken || !gatewayUrl) {
+  if (!gatewayToken || !configuredGatewayUrl) {
     return {
       ok: false as const,
-      note: "外部 AI 檢查尚未設定完成：後端需要 .env 的 key 或 CLOUDFLARE_AI_GATEWAY_TOKEN，以及 CLOUDFLARE_AI_GATEWAY_URL。請先用本機檢查，不要把草稿當成已確認資料。",
+      note: "外部 AI 檢查尚未設定完成：後端需要 .env 的 key 或 CLOUDFLARE_AI_GATEWAY_TOKEN，以及 CLOUDFLARE_AI_GATEWAY_URL。若使用 api.cloudflare.com 的 AI Gateway，請同時設定 CLOUDFLARE_AI_GATEWAY_ID。請先用本機檢查，不要把草稿當成已確認資料。",
     };
   }
 
   let parsedUrl: URL;
   try {
-    parsedUrl = new URL(gatewayUrl);
+    parsedUrl = new URL(configuredGatewayUrl);
   } catch {
     return {
       ok: false as const,
@@ -160,7 +162,12 @@ function createGatewayRequestConfig() {
     };
   }
 
+  if (parsedUrl.pathname.endsWith("/ai/v1")) {
+    parsedUrl.pathname = `${parsedUrl.pathname}/chat/completions`;
+  }
+
   const isProviderNativeGateway = parsedUrl.hostname === cloudflareGatewayHost;
+  const isCloudflareAccountAi = parsedUrl.hostname === "api.cloudflare.com";
   const headers: Record<string, string> = {
     "content-type": "application/json",
   };
@@ -173,19 +180,25 @@ function createGatewayRequestConfig() {
     }
   } else {
     headers.authorization = `Bearer ${gatewayToken}`;
+
+    if (isCloudflareAccountAi && gatewayId) {
+      headers["cf-aig-gateway-id"] = gatewayId;
+    }
   }
 
   return {
     ok: true as const,
-    gatewayUrl,
+    gatewayUrl: parsedUrl.toString(),
     headers,
     model:
       process.env.CLOUDFLARE_AI_MODEL ??
-      (isProviderNativeGateway ? "gpt-4o-mini" : "openai/gpt-4o-mini"),
+      (isProviderNativeGateway
+        ? "gpt-4o-mini"
+        : "@cf/moonshotai/kimi-k2.7-code"),
   };
 }
 
-async function reviewWithCloudflare(requestBody: ReviewRequest) {
+export async function reviewWithCloudflare(requestBody: ReviewRequest) {
   const gatewayConfig = createGatewayRequestConfig();
 
   if (!gatewayConfig.ok) {
@@ -227,10 +240,7 @@ async function reviewWithCloudflare(requestBody: ReviewRequest) {
       // Some upstream failures do not return JSON.
     }
 
-    const note =
-      upstreamResponse.status === 402 || errorMessage.includes("balance")
-        ? "Cloudflare AI Gateway 已連上，但帳號餘額不足或需要設定 BYOK。請先使用本機檢查，並不要把草稿當成已確認資料。"
-        : "外部 AI 檢查暫時失敗：請改用本機檢查，並保留需要人工確認與不能直接變成任務的標示。";
+    const note = createUpstreamErrorNote(upstreamResponse.status, errorMessage);
 
     return {
       note,
@@ -250,32 +260,94 @@ async function reviewWithCloudflare(requestBody: ReviewRequest) {
   };
 }
 
-loadLocalEnv();
-
-const server = createServer(async (request, response) => {
-  if (request.method !== "POST" || request.url !== "/api/ai-review") {
-    response.writeHead(404);
-    response.end();
-    return;
+function createUpstreamErrorNote(status: number, errorMessage: string) {
+  if (status === 402 || errorMessage.includes("balance")) {
+    return "Cloudflare AI Gateway 已連上，但帳號餘額不足或需要設定 BYOK。請先使用本機檢查，並不要把草稿當成已確認資料。";
   }
 
-  try {
-    const rawBody = await readBody(request);
-    const requestBody = JSON.parse(rawBody) as ReviewRequest;
-    const result = await reviewWithCloudflare(requestBody);
-
-    sendJson(response, result.statusCode, {
-      note: result.note,
-      source: result.source,
-    });
-  } catch {
-    sendJson(response, 500, {
-      note: "AI 檢查服務發生錯誤：請回到本機檢查，並由人類確認草稿內容。",
-      source: "upstream_error",
-    });
+  if (status === 401 || status === 403) {
+    return "Cloudflare AI Gateway 已連上，但授權失敗。請確認 .env 裡的 key 或 CLOUDFLARE_AI_GATEWAY_TOKEN 是否有效；草稿仍需人工確認。";
   }
-});
 
-server.listen(port, () => {
-  console.log(`AI review proxy listening on http://localhost:${port}`);
-});
+  if (status === 404) {
+    return "Cloudflare AI Gateway 已連上，但 Gateway URL 找不到。請確認 .env 裡的 CLOUDFLARE_AI_GATEWAY_URL 是否包含正確帳號與 gateway 路徑；草稿仍需人工確認。";
+  }
+
+  if (status === 400) {
+    return "Cloudflare AI Gateway 已連上，但請求格式或模型名稱被拒絕。請確認 CLOUDFLARE_AI_MODEL 與 Gateway URL 的 provider 是否相符；草稿仍需人工確認。";
+  }
+
+  return `外部 AI 檢查暫時失敗（HTTP ${status}）：請改用本機檢查，並保留需要人工確認與不能直接變成任務的標示。`;
+}
+
+export function createAiReviewServer(
+  review: (requestBody: ReviewRequest) => Promise<{
+    note: string;
+    source: ReviewResponse["source"];
+    statusCode: number;
+  }> = reviewWithCloudflare,
+) {
+  return createServer(async (request, response) => {
+    if (request.method === "OPTIONS" && request.url === "/api/ai-review") {
+      response.writeHead(204, {
+        "access-control-allow-origin": "*",
+        "access-control-allow-methods": "POST, OPTIONS",
+        "access-control-allow-headers": "content-type",
+      });
+      response.end();
+      return;
+    }
+
+    if (request.method !== "POST" || request.url !== "/api/ai-review") {
+      response.writeHead(404);
+      response.end();
+      return;
+    }
+
+    try {
+      const rawBody = await readBody(request);
+      const requestBody = JSON.parse(rawBody) as ReviewRequest;
+      const result = await review(requestBody);
+
+      sendJson(response, result.statusCode, {
+        note: result.note,
+        source: result.source,
+      });
+    } catch {
+      sendJson(response, 500, {
+        note: "AI 檢查服務發生錯誤：請回到本機檢查，並由人類確認草稿內容。",
+        source: "upstream_error",
+      });
+    }
+  });
+}
+
+export function startAiReviewServer() {
+  loadLocalEnv();
+  const port = Number(process.env.AI_REVIEW_PORT ?? 8787);
+  const server = createAiReviewServer();
+
+  server.on("error", (error: NodeJS.ErrnoException) => {
+    if (error.code === "EADDRINUSE") {
+      console.error(
+        `AI review proxy port ${port} 已被占用。請關掉舊的 pnpm dev:api，或在 .env 設定 AI_REVIEW_PORT 後同步調整 Vite proxy。`,
+      );
+      process.exitCode = 1;
+      return;
+    }
+
+    throw error;
+  });
+
+  server.listen(port, () => {
+    console.log(`AI review proxy listening on http://localhost:${port}`);
+  });
+
+  return server;
+}
+
+const executedPath = process.argv[1] ? pathToFileURL(process.argv[1]).href : "";
+
+if (import.meta.url === executedPath) {
+  startAiReviewServer();
+}

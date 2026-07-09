@@ -108,8 +108,7 @@ describe("App", () => {
     render(<App />);
 
     fireEvent.click(screen.getByRole("button", { name: "整理工作台" }));
-    fireEvent.click(screen.getByText("手動編輯草稿文字"));
-    fireEvent.change(screen.getByLabelText("手動摘要"), {
+    fireEvent.change(screen.getByLabelText("候選摘要"), {
       target: { value: "手動改寫的候選摘要，仍需人工確認。" },
     });
     fireEvent.click(screen.getByRole("button", { name: "送到候選整理" }));
@@ -196,5 +195,11 @@ describe("App", () => {
     expect(screen.getAllByText(/原始狀態仍需人工確認/).length).toBeGreaterThan(
       0,
     );
+    expect(
+      (screen.getByLabelText("目前草稿原因") as HTMLTextAreaElement).value,
+    ).toContain("原始狀態仍需人工確認");
+    expect(
+      screen.getByRole("button", { name: "套用到草稿" }),
+    ).toBeInTheDocument();
   });
 });
