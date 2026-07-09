@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { App } from "../src/app/App";
 
 afterEach(() => {
+  window.history.pushState({}, "", "/");
   vi.unstubAllGlobals();
 });
 
@@ -201,5 +202,114 @@ describe("App", () => {
     expect(
       screen.getByRole("button", { name: "套用到草稿" }),
     ).toBeInTheDocument();
+  });
+
+  it("renders the v1 demo with action-taker tabs", () => {
+    window.history.pushState({}, "", "/v1/");
+
+    render(<App />);
+
+    expect(
+      screen.getByRole("heading", { name: "行動者資訊分流 Demo" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "已人工確認" }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "AI 排序" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "原始回報" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "回報表單" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "資訊請求" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "整理工作台" }),
+    ).toBeInTheDocument();
+    expect(screen.getAllByText("人工確認").length).toBeGreaterThan(0);
+    expect(screen.queryByText("需要確認")).not.toBeInTheDocument();
+  });
+
+  it("sorts high urgency reports above spam in the v1 AI tab", () => {
+    window.history.pushState({}, "", "/v1/");
+
+    render(<App />);
+
+    fireEvent.click(screen.getByRole("button", { name: "AI 排序" }));
+
+    const firstReport = screen.getAllByRole("article")[0];
+    expect(within(firstReport).getByText("V1-001")).toBeInTheDocument();
+    expect(screen.getByText(/排序不是可信度背書/)).toBeInTheDocument();
+  });
+
+  it("adds form reports as unconfirmed raw reports in v1", () => {
+    window.history.pushState({}, "", "/v1/");
+
+    render(<App />);
+
+    fireEvent.click(screen.getByRole("button", { name: "回報表單" }));
+    fireEvent.change(screen.getByLabelText("原始回報內容"), {
+      target: { value: "模擬新增：有人轉述需要協助，但地點和時間不清楚。" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "加入原始回報" }));
+
+    expect(
+      screen.getByRole("heading", { name: "原始回報" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("模擬新增：有人轉述需要協助，但地點和時間不清楚。"),
+    ).toBeInTheDocument();
+    expect(screen.getAllByText("需要確認").length).toBeGreaterThan(0);
+  });
+
+  it("lets reporters append related info instead of creating duplicate v1 reports", () => {
+    window.history.pushState({}, "", "/v1/");
+
+    render(<App />);
+
+    fireEvent.click(screen.getByRole("button", { name: "回報表單" }));
+    fireEvent.change(screen.getByLabelText("原始回報內容"), {
+      target: { value: "我也聽到避難點飲用水快不夠，可能需要再確認補給。" },
+    });
+
+    expect(screen.getByText("可能相關報告")).toBeInTheDocument();
+    expect(screen.getByText(/V1-001/)).toBeInTheDocument();
+
+    fireEvent.click(
+      screen.getAllByRole("button", { name: "加到這筆報告下方" })[0],
+    );
+
+    expect(
+      screen.getByRole("heading", { name: "原始回報" }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("補充資訊")).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "表單補充：我也聽到避難點飲用水快不夠，可能需要再確認補給。",
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("lets organizers send specific information requests in v1", () => {
+    window.history.pushState({}, "", "/v1/");
+
+    render(<App />);
+
+    fireEvent.click(screen.getByRole("button", { name: "資訊請求" }));
+    fireEvent.change(screen.getByLabelText("需要補問的欄位"), {
+      target: { value: "接收條件" },
+    });
+    fireEvent.change(screen.getByLabelText("請求內容"), {
+      target: { value: "請確認接收窗口是否仍在現場。" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "送出資訊請求" }));
+
+    expect(screen.getByText("REQ-001 / V1-003 / 接收條件")).toBeInTheDocument();
+    expect(
+      screen.getByText("請確認接收窗口是否仍在現場。"),
+    ).toBeInTheDocument();
+    expect(screen.getByText("等待人工補充，不代表派工。")).toBeInTheDocument();
   });
 });
