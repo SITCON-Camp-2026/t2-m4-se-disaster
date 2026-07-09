@@ -164,7 +164,8 @@ input {
 .draft-empty button:hover,
 .workbench__checklist button:hover,
 .v1-form-panel button:hover,
-.v1-table__actions button:hover {
+.v1-table__actions button:hover,
+.v1-request-answer button:hover {
   transform: translateY(-1px);
   box-shadow: 0 10px 20px rgb(105 78 58 / 12%);
 }
@@ -615,7 +616,8 @@ input {
 }
 
 .v1-form-panel textarea,
-.v1-form-panel select {
+.v1-form-panel select,
+.v1-request-answer textarea {
   width: 100%;
   border: 1px solid #e4cfc0;
   border-radius: 8px;
@@ -625,7 +627,8 @@ input {
 }
 
 .v1-form-panel textarea:focus,
-.v1-form-panel select:focus {
+.v1-form-panel select:focus,
+.v1-request-answer textarea:focus {
   outline: 3px solid rgb(90 191 164 / 22%);
   border-color: #5abfa4;
 }
@@ -731,6 +734,54 @@ input {
 .v1-table__actions button:disabled {
   cursor: not-allowed;
   opacity: 0.55;
+}
+
+.v1-request-answer {
+  display: grid;
+  gap: 8px;
+  min-width: min(280px, 100%);
+}
+
+.v1-request-answer label {
+  display: grid;
+  gap: 6px;
+  color: #475467;
+  font-size: 0.88rem;
+  font-weight: 800;
+}
+
+.v1-request-answer textarea {
+  min-height: 70px;
+  resize: vertical;
+}
+
+.v1-request-answer button {
+  width: fit-content;
+  border: 1px solid #d7e0f5;
+  border-radius: 8px;
+  padding: 9px 12px;
+  background: #ffffff;
+  color: #334a8a;
+  cursor: pointer;
+  font-weight: 800;
+}
+
+.v1-activity {
+  border: 1px solid #d8e3f5;
+  border-radius: 8px;
+  padding: 14px;
+  background: #f7f9ff;
+}
+
+.v1-activity h4,
+.v1-activity p {
+  margin: 0;
+}
+
+.v1-activity ul {
+  margin: 8px 0 0;
+  padding-left: 20px;
+  line-height: 1.55;
 }
 
 .draft-editor__grid {

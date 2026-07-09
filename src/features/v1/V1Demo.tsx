@@ -11,6 +11,7 @@ import {
 type V1Tab =
   | "verified"
   | "ai-sorted"
+  | "high-risk"
   | "raw"
   | "report-form"
   | "info-requests"
@@ -22,11 +23,23 @@ type InfoRequest = {
   field: string;
   question: string;
   createdAt: string;
+  status: "pending" | "answered";
+  answer?: string;
+  answeredAt?: string;
+};
+
+type NewInfoRequest = Pick<InfoRequest, "reportId" | "field" | "question">;
+
+type ActivityLogEntry = {
+  id: string;
+  text: string;
+  createdAt: string;
 };
 
 const tabs: Array<{ key: V1Tab; label: string }> = [
   { key: "verified", label: "已人工確認" },
   { key: "ai-sorted", label: "AI 排序" },
+  { key: "high-risk", label: "未確認 / 高風險" },
   { key: "raw", label: "原始回報" },
   { key: "report-form", label: "回報表單" },
   { key: "info-requests", label: "資訊請求" },
@@ -125,11 +138,18 @@ export function V1Demo() {
   const [reports, setReports] = useState<V1Report[]>(v1Reports);
   const [formText, setFormText] = useState("");
   const [infoRequests, setInfoRequests] = useState<InfoRequest[]>([]);
+  const [activityLog, setActivityLog] = useState<ActivityLogEntry[]>([]);
 
   const verifiedReports = reports.filter(
     (report) => report.verificationStatus === "manual_verified",
   );
   const aiSortedReports = useMemo(() => sortForAiQueue(reports), [reports]);
+  const highRiskReports = aiSortedReports.filter(
+    (report) =>
+      report.verificationStatus !== "manual_verified" &&
+      report.verificationStatus !== "rejected" &&
+      !report.isLikelySpam,
+  );
   const relatedReports = useMemo(
     () => findRelatedReports(formText, reports),
     [formText, reports],
@@ -137,6 +157,20 @@ export function V1Demo() {
   const unverifiedCount = reports.filter(
     (report) => report.verificationStatus !== "manual_verified",
   ).length;
+  const pendingRequestCount = infoRequests.filter(
+    (request) => request.status === "pending",
+  ).length;
+
+  function logAction(text: string) {
+    setActivityLog((currentLog) => [
+      {
+        id: `LOG-${Date.now()}-${currentLog.length}`,
+        text,
+        createdAt: new Date().toISOString(),
+      },
+      ...currentLog,
+    ]);
+  }
 
   function submitReport(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -146,6 +180,7 @@ export function V1Demo() {
       createUserReport(trimmed),
       ...currentReports,
     ]);
+    logAction("新增一筆表單原始回報，狀態為需要確認。");
     setFormText("");
     setActiveTab("raw");
   }
@@ -171,6 +206,7 @@ export function V1Demo() {
           : report,
       ),
     );
+    logAction(`將表單補充資訊加到 ${reportId} 下方，等待人工檢查。`);
     setFormText("");
     setActiveTab("raw");
   }
@@ -188,6 +224,7 @@ export function V1Demo() {
           : report,
       ),
     );
+    logAction(`人工標示 ${reportId} 為已確認。`);
   }
 
   function markNeedsReview(reportId: string) {
@@ -202,17 +239,56 @@ export function V1Demo() {
           : report,
       ),
     );
+    logAction(`將 ${reportId} 退回需要確認。`);
   }
 
-  function createInfoRequest(request: Omit<InfoRequest, "id" | "createdAt">) {
+  function createInfoRequest(request: NewInfoRequest) {
     setInfoRequests((currentRequests) => [
       {
         ...request,
         id: `REQ-${String(currentRequests.length + 1).padStart(3, "0")}`,
         createdAt: new Date().toISOString(),
+        status: "pending",
       },
       ...currentRequests,
     ]);
+    logAction(`針對 ${request.reportId} 送出資訊請求：${request.field}。`);
+  }
+
+  function answerInfoRequest(requestId: string, answer: string) {
+    const request = infoRequests.find((item) => item.id === requestId);
+    if (!request) return;
+
+    const trimmed = answer.trim();
+    if (!trimmed) return;
+
+    setInfoRequests((currentRequests) =>
+      currentRequests.map((item) =>
+        item.id === requestId
+          ? {
+              ...item,
+              status: "answered",
+              answer: trimmed,
+              answeredAt: new Date().toISOString(),
+            }
+          : item,
+      ),
+    );
+    setReports((currentReports) =>
+      currentReports.map((report) =>
+        report.id === request.reportId
+          ? {
+              ...report,
+              additionalInfo: [
+                ...report.additionalInfo,
+                `資訊請求回覆（${request.field}）：${trimmed}`,
+              ],
+              organizerNotes: `${report.organizerNotes} / ${request.id} 已收到補充資訊，仍需人工分流。`,
+            }
+          : report,
+      ),
+    );
+    logAction(`收到 ${request.id} 的補充資訊，已加回 ${request.reportId}。`);
   }
 
   return (
@@ -229,6 +305,7 @@ export function V1Demo() {
       <div className="v1-stats" aria-label="v1 報告統計">
         <Stat label="人工確認" value={verifiedReports.length} />
         <Stat label="待確認或暫不採用" value={unverifiedCount} />
+        <Stat label="未完成資訊請求" value={pendingRequestCount} />
         <Stat
           label="疑似垃圾"
           value={reports.filter((report) => report.isLikelySpam).length}
@@ -254,6 +331,7 @@ export function V1Demo() {
           description="這些是模擬資料中品質較高、已由人工標示確認的回報。系統仍不產生派工、路線或出發建議。"
           reports={verifiedReports}
           mode="verified"
+          requests={infoRequests}
         />
       ) : activeTab === "ai-sorted" ? (
         <ReportGrid
@@ -261,6 +339,15 @@ export function V1Demo() {
           description="排序規則只用於整理畫面：高急迫在上、疑似垃圾在下。排序不是可信度背書，也不是行動優先順序。"
           reports={aiSortedReports}
           mode="ai"
+          requests={infoRequests}
+        />
+      ) : activeTab === "high-risk" ? (
+        <ReportGrid
+          title="未確認 / 高風險"
+          description="這裡只放還沒人工確認、但可能需要人盯著看的回報。畫面保留警示與補問狀態，不把它們放進已確認主畫面。"
+          reports={highRiskReports}
+          mode="high-risk"
+          requests={infoRequests}
         />
       ) : activeTab === "raw" ? (
         <ReportGrid
@@ -268,6 +355,7 @@ export function V1Demo() {
           description="保留原文，讓行動者或整理者看見資料品質差異。低品質回報不會被改寫成任務。"
           reports={reports}
           mode="raw"
+          requests={infoRequests}
         />
       ) : activeTab === "report-form" ? (
         <ReportForm
@@ -282,10 +370,13 @@ export function V1Demo() {
           reports={reports}
           requests={infoRequests}
           onCreateRequest={createInfoRequest}
+          onAnswerRequest={answerInfoRequest}
         />
       ) : (
         <OrganizerWorkstation
           reports={reports}
+          requests={infoRequests}
+          activityLog={activityLog}
           onVerify={markManuallyVerified}
           onNeedsReview={markNeedsReview}
         />
@@ -308,11 +399,13 @@ function ReportGrid({
   description,
   reports,
   mode,
+  requests,
 }: {
   title: string;
   description: string;
   reports: V1Report[];
-  mode: "verified" | "ai" | "raw";
+  mode: "verified" | "ai" | "high-risk" | "raw";
+  requests: InfoRequest[];
 }) {
   return (
     <section className="v1-section">
@@ -325,7 +418,14 @@ function ReportGrid({
       </div>
       <div className="v1-grid">
         {reports.map((report) => (
-          <ReportCard key={report.id} report={report} mode={mode} />
+          <ReportCard
+            key={report.id}
+            report={report}
+            mode={mode}
+            requests={requests.filter(
+              (request) => request.reportId === report.id,
+            )}
+          />
         ))}
       </div>
     </section>
@@ -335,10 +435,21 @@ function ReportGrid({
 function ReportCard({
   report,
   mode,
+  requests,
 }: {
   report: V1Report;
-  mode: "verified" | "ai" | "raw";
+  mode: "verified" | "ai" | "high-risk" | "raw";
+  requests: InfoRequest[];
 }) {
+  const visibleRequests =
+    mode === "verified"
+      ? []
+      : requests.map((request) =>
+          request.status === "answered"
+            ? `${request.id} 已回覆 ${request.field}：${request.answer}`
+            : `${request.id} 待補 ${request.field}：${request.question}`,
+        );
+
   return (
     <article className={`v1-card v1-card--${report.quality}`}>
       <div className="v1-card__header">
@@ -376,6 +487,9 @@ function ReportCard({
       {mode !== "verified" && (
         <WarningList title="需要確認" items={report.confirmationQuestions} />
       )}
+      {visibleRequests.length > 0 && (
+        <WarningList title="資訊請求" items={visibleRequests} />
+      )}
       {report.additionalInfo.length > 0 && (
         <WarningList title="補充資訊" items={report.additionalInfo} />
       )}
@@ -387,19 +501,25 @@ function InfoRequestPanel({
   reports,
   requests,
   onCreateRequest,
+  onAnswerRequest,
 }: {
   reports: V1Report[];
   requests: InfoRequest[];
-  onCreateRequest: (request: Omit<InfoRequest, "id" | "createdAt">) => void;
+  onCreateRequest: (request: NewInfoRequest) => void;
+  onAnswerRequest: (requestId: string, answer: string) => void;
 }) {
+  const requestableReports = reports.filter(
+    (report) => report.verificationStatus !== "manual_verified",
+  );
   const defaultReportId =
+    requestableReports[0]?.id ??
     reports.find((report) => report.verificationStatus !== "manual_verified")
       ?.id ??
-    reports[0]?.id ??
     "";
   const [reportId, setReportId] = useState(defaultReportId);
   const [field, setField] = useState("地點");
   const [question, setQuestion] = useState("");
+  const [answers, setAnswers] = useState<Record<string, string>>({});
 
   function submitRequest(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -407,6 +527,11 @@ function InfoRequestPanel({
     if (!reportId || !trimmed) return;
     onCreateRequest({ reportId, field, question: trimmed });
     setQuestion("");
+  }
+
+  function submitAnswer(requestId: string) {
+    onAnswerRequest(requestId, answers[requestId] ?? "");
+    setAnswers((currentAnswers) => ({ ...currentAnswers, [requestId]: "" }));
   }
 
   return (
@@ -423,7 +548,7 @@ function InfoRequestPanel({
             value={reportId}
             onChange={(event) => setReportId(event.target.value)}
           >
-            {reports.map((report) => (
+            {requestableReports.map((report) => (
               <option key={report.id} value={report.id}>
                 {report.id} {report.title}
               </option>
@@ -466,8 +591,35 @@ function InfoRequestPanel({
                   {request.id} / {request.reportId} / {request.field}
                 </h4>
                 <p>{request.question}</p>
-                <small>等待人工補充，不代表派工。</small>
+                <small>
+                  {request.status === "pending"
+                    ? "等待人工補充，不代表派工。"
+                    : `已收到補充：${request.answer}`}
+                </small>
               </div>
+              {request.status === "pending" && (
+                <div className="v1-request-answer">
+                  <label>
+                    回覆內容
+                    <textarea
+                      value={answers[request.id] ?? ""}
+                      onChange={(event) =>
+                        setAnswers((currentAnswers) => ({
+                          ...currentAnswers,
+                          [request.id]: event.target.value,
+                        }))
+                      }
+                      placeholder="填入模擬補充資訊。"
+                    />
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => submitAnswer(request.id)}
+                  >
+                    標示已回覆
+                  </button>
+                </div>
+              )}
             </article>
           ))
         )}
@@ -555,10 +707,14 @@ function ReportForm({
 
 function OrganizerWorkstation({
   reports,
+  requests,
+  activityLog,
   onVerify,
   onNeedsReview,
 }: {
   reports: V1Report[];
+  requests: InfoRequest[];
+  activityLog: ActivityLogEntry[];
   onVerify: (reportId: string) => void;
   onNeedsReview: (reportId: string) => void;
 }) {
@@ -583,7 +739,15 @@ function OrganizerWorkstation({
               <p>{report.organizerNotes}</p>
               <small>
                 {qualityLabels[report.quality]} /{" "}
-                {verificationLabels[report.verificationStatus]}
+                {verificationLabels[report.verificationStatus]} /{" "}
+                {
+                  requests.filter(
+                    (request) =>
+                      request.reportId === report.id &&
+                      request.status === "pending",
+                  ).length
+                }{" "}
+                個待補請求
               </small>
             </div>
             <div className="v1-table__actions">
@@ -600,6 +764,18 @@ function OrganizerWorkstation({
             </div>
           </article>
         ))}
+      </div>
+      <div className="v1-activity">
+        <h4>操作紀錄</h4>
+        {activityLog.length === 0 ? (
+          <p>目前還沒有本次操作紀錄。</p>
+        ) : (
+          <ul>
+            {activityLog.slice(0, 6).map((entry) => (
+              <li key={entry.id}>{entry.text}</li>
+            ))}
+          </ul>
+        )}
       </div>
     </section>
   );

@@ -217,6 +217,9 @@ describe("App", () => {
     ).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "AI 排序" })).toBeInTheDocument();
     expect(
+      screen.getByRole("button", { name: "未確認 / 高風險" }),
+    ).toBeInTheDocument();
+    expect(
       screen.getByRole("button", { name: "原始回報" }),
     ).toBeInTheDocument();
     expect(
@@ -242,6 +245,21 @@ describe("App", () => {
     const firstReport = screen.getAllByRole("article")[0];
     expect(within(firstReport).getByText("V1-001")).toBeInTheDocument();
     expect(screen.getByText(/排序不是可信度背書/)).toBeInTheDocument();
+  });
+
+  it("keeps unverified high-risk v1 reports separate from verified reports", () => {
+    window.history.pushState({}, "", "/v1/");
+
+    render(<App />);
+
+    fireEvent.click(screen.getByRole("button", { name: "未確認 / 高風險" }));
+
+    expect(
+      screen.getByRole("heading", { name: "未確認 / 高風險" }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("V1-003")).toBeInTheDocument();
+    expect(screen.getAllByText("需要確認").length).toBeGreaterThan(0);
+    expect(screen.queryByText("V1-006")).not.toBeInTheDocument();
   });
 
   it("adds form reports as unconfirmed raw reports in v1", () => {
@@ -311,5 +329,20 @@ describe("App", () => {
       screen.getByText("請確認接收窗口是否仍在現場。"),
     ).toBeInTheDocument();
     expect(screen.getByText("等待人工補充，不代表派工。")).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText("回覆內容"), {
+      target: { value: "模擬回覆：接收窗口仍在。" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "標示已回覆" }));
+
+    expect(
+      screen.getByText("已收到補充：模擬回覆：接收窗口仍在。"),
+    ).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "未確認 / 高風險" }));
+
+    expect(
+      screen.getByText("資訊請求回覆（接收條件）：模擬回覆：接收窗口仍在。"),
+    ).toBeInTheDocument();
   });
 });
